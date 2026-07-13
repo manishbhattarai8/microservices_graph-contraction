@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ClusterFlow — SCC-Aware Dependency Optimizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap"
+  rel="stylesheet"
+/>
+<style>
+:root {
+  --ink: #1d2031; --muted: #727586; --line: #e7e7ed;
+  --purple: #725cff; --cyan: #4cbfd0; --pink: #ff8196; --yellow: #f1b64c; --gray: #a9abb8; --red: #e5484d;
+  --bg: #f8f8fb;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: Manrope, Arial, sans-serif; }
+header { height: 76px; background: #fff; border-bottom: 1px solid var(--line); padding: 0 5.3vw; display: flex; align-items: center; justify-content: space-between; }
+.brand { font-size: 21px; font-weight: 800; letter-spacing: -1px; display: flex; align-items: center; gap: 8px; }
+.brand-mark { color: var(--purple); font-size: 26px; }
+.brand small { font: 10px "DM Mono"; letter-spacing: 1.2px; color: #989aa7; margin-left: 7px; }
+.header-actions { display: flex; align-items: center; gap: 18px; }
+.live { font: 11px "DM Mono"; color: #77798a; }
+.live i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #54cc9a; margin-right: 6px; box-shadow: 0 0 0 3px #e1f8ed; }
+.ghost, button { font: 600 12px Manrope; border: 0; cursor: pointer; }
+.ghost { background: transparent; color: #656778; }
+.primary { background: var(--purple); color: white; border-radius: 7px; padding: 11px 15px; box-shadow: 0 4px 12px #725cff40; }
+.primary:disabled { background: #d8d8e0; box-shadow: none; cursor: not-allowed; }
+.primary span { font-size: 16px; margin-left: 5px; }
+main { max-width: 1320px; margin: auto; padding: 58px 5.3vw 70px; }
+.intro { display: flex; justify-content: space-between; align-items: end; margin-bottom: 42px; gap: 24px; flex-wrap: wrap; }
+.eyebrow { font: 10px "DM Mono"; letter-spacing: 1.35px; color: #8a8c9a; margin: 0 0 13px; }
+h1 { font-size: 41px; line-height: 1.15; letter-spacing: -2.1px; margin: 0; font-weight: 800; }
+h1 em { font-family: Georgia, serif; font-weight: 400; color: var(--purple); }
+.sub { color: var(--muted); font-size: 13px; line-height: 1.75; max-width: 520px; margin: 16px 0 0; }
+.stats { display: flex; gap: 30px; padding-bottom: 3px; flex-wrap: wrap; }
+.stats div { display: flex; flex-direction: column; }
+.stats b { font: 700 24px "DM Mono"; letter-spacing: -2px; }
+.stats span { font-size: 10px; color: #8b8d9b; margin-top: 5px; text-transform: uppercase; letter-spacing: 0.6px; }
+
+.workspace { display: grid; grid-template-columns: minmax(0, 1fr) 320px; background: #fff; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: 0 9px 30px #31314b08; }
+.left-panel { min-width: 0; border-right: 1px solid var(--line); }
+.panel-title { min-height: 52px; border-bottom: 1px solid var(--line); padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; font: 11px "DM Mono"; letter-spacing: 1px; color: #5e6070; flex-wrap: wrap; gap: 8px; }
+.panel-title .btnrow { display: flex; gap: 8px; }
+.panel-title .btnrow button { font: 600 10.5px "DM Mono"; padding: 7px 10px; border-radius: 5px; letter-spacing: 0.3px; }
+.btn-cycle { background: #fdeeee; color: #b8383c; }
+.btn-condense { background: #eef0ff; color: #4436c9; }
+.legend { min-height: 40px; display: flex; align-items: center; gap: 14px; padding: 8px 20px; font-size: 10px; color: #878997; flex-wrap: wrap; }
+.legend i { display: inline-block; vertical-align: middle; margin-right: 5px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; }
+.selected-dot { background: var(--purple); }
+.scc-dot { background: var(--red); border: 1px dashed var(--red); background: transparent; width: 10px; height: 10px; }
+.line { width: 16px; height: 1px; background: #bfc0ca; display: inline-block; }
+.canvas-wrap { height: 560px; position: relative; background-image: radial-gradient(#dddde6 1px, transparent 1px); background-size: 20px 20px; }
+.hint { position: absolute; bottom: 15px; left: 20px; border: 1px solid #ececf2; background: #ffffffde; color: #90919e; border-radius: 5px; padding: 7px 9px; font-size: 10px; }
+.right-panel { padding-bottom: 16px; display: flex; flex-direction: column; }
+.queue-copy { font-size: 11px; color: #858796; line-height: 1.6; margin: 17px 20px; }
+.badge { font-size: 9px; color: var(--purple); background: #f0edff; padding: 5px 7px; border-radius: 3px; letter-spacing: 0.4px; }
+.selection { margin: 0 20px; min-height: 90px; border: 1px dashed #d6d6df; border-radius: 7px; padding: 12px; display: flex; flex-wrap: wrap; align-content: center; justify-content: center; gap: 7px; text-align: center; }
+.selection p { width: 100%; font-size: 12px; margin: 5px 0 0; color: #777988; }
+.selection small { font-size: 10px; color: #a6a7b1; }
+.empty-icon { font-size: 19px; color: #c3c4ce; width: 100%; }
+.service-chip { background: #f0edff; color: #5543c8; padding: 7px 8px; border-radius: 4px; font: 10px "DM Mono"; text-align: left; }
+.impact { margin: 18px 20px 12px; border-top: 1px solid var(--line); padding-top: 14px; }
+.impact > p { font: 10px "DM Mono"; color: #9293a0; margin: 0 0 10px; }
+.impact-row { display: flex; justify-content: space-between; margin: 8px 0; font-size: 11px; color: #7d7f8d; }
+.impact-row b { color: var(--ink); font: 500 11px "DM Mono"; }
+.wide { width: calc(100% - 40px); margin: 0 20px; }
+.scc-summary { margin: 0 20px 16px; }
+.scc-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-radius: 6px; background: #fbf5f5; border: 1px solid #f3e3e3; font: 10px "DM Mono"; color: #9e4245; margin-bottom: 6px; }
+.scc-item.trivial { display:none; }
+
+.bottom { margin-top: 49px; }
+.bottom-heading { display: flex; justify-content: space-between; align-items: end; flex-wrap: wrap; gap: 12px; }
+.bottom h2 { font-size: 20px; letter-spacing: -0.7px; margin: 0; }
+.bottom-heading > p { font-size: 11px; color: #898b99; max-width: 340px; line-height: 1.6; margin: 0; }
+
+.lab { margin-top: 49px; background: #17182a; border-radius: 10px; padding: 30px 32px; color: #fff; }
+.lab-head { display: flex; justify-content: space-between; align-items: end; flex-wrap: wrap; gap: 18px; margin-bottom: 22px; }
+.lab-head .eyebrow { color: #8f90b0; }
+.lab-head h2 { font-size: 20px; letter-spacing: -0.6px; margin: 0; }
+.lab-head p { font-size: 11px; color: #9c9dbb; max-width: 420px; line-height: 1.65; margin: 8px 0 0; }
+.lab-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.lab-controls select { font: 500 12px "DM Mono"; padding: 10px 12px; border-radius: 6px; border: 1px solid #33334f; background: #1f2038; color: #fff; min-width: 190px; }
+.danger { background: #e5484d; color: white; border-radius: 7px; padding: 11px 15px; }
+.lab-body { display: grid; grid-template-columns: 1.15fr 1fr; gap: 20px; }
+@media (max-width: 900px) { .lab-body { grid-template-columns: 1fr; } }
+.lab-card { background: #1f2038; border: 1px solid #2e2f4c; border-radius: 8px; padding: 18px 20px; }
+.lab-card p.label { font: 10px "DM Mono"; color: #8f90b0; letter-spacing: 0.8px; margin: 0 0 14px; }
+.metric-row { display: flex; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
+.metric { flex: 1; min-width: 130px; background: #17182a; border-radius: 7px; padding: 14px 16px; border: 1px solid #2e2f4c; }
+.metric b { display: block; font: 700 22px "DM Mono"; letter-spacing: -1px; }
+.metric span { font-size: 10px; color: #8f90b0; text-transform: uppercase; letter-spacing: 0.5px; }
+.metric.now b { color: var(--red); }
+.metric.before b { color: #8f90b0; }
+.delta { font: 600 11px "DM Mono"; color: #54cc9a; margin-top: 4px; display: inline-block; }
+.delta.flat { color: #8f90b0; }
+.timeline { list-style: none; margin: 0; padding: 0; max-height: 230px; overflow-y: auto; }
+.timeline li { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-bottom: 1px solid #2a2b47; font-size: 11.5px; }
+.timeline li:last-child { border-bottom: none; }
+.timeline .t { font: 11px "DM Mono"; color: #ff9b9b; min-width: 48px; }
+.timeline .msg { color: #d5d6ea; line-height: 1.5; }
+.timeline .msg b { color: #fff; }
+.timeline-empty { color: #6f7092; font-size: 11px; padding: 8px 0; }
+
+/* complexity lab specifics */
+.complexity-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+@media (max-width: 700px) { .complexity-grid { grid-template-columns: 1fr; } }
+.ccard { background: #17182a; border: 1px solid #2e2f4c; border-radius: 7px; padding: 13px 15px; }
+.ccard .bigo { font: 700 15px "DM Mono"; color: #b9a9ff; }
+.ccard .sub { font-size: 10px; color: #8f90b0; margin-top: 4px; line-height: 1.5; }
+.ccard .num { font: 600 12px "DM Mono"; color: #fff; margin-top: 8px; }
+.scale-note { font-size: 10.5px; color: #9c9dbb; line-height: 1.7; border-top: 1px solid #2a2b47; padding-top: 12px; margin-top: 4px; }
+.scale-note b { color: #d5d6ea; }
+.trace { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; }
+.trace li { font: 10.5px "DM Mono"; color: #a9aac8; padding: 5px 0; border-bottom: 1px dashed #2a2b47; line-height: 1.5; }
+.trace li b { color: #fff; }
+.trace li.pop { color: #ff9b9b; }
+
+.components { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 21px; }
+@media (max-width: 900px) { .components { grid-template-columns: 1fr; } }
+.component { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 17px 18px; min-height: 119px; }
+.component-top { display: flex; justify-content: space-between; align-items: center; }
+.component-id { font: 10px "DM Mono"; color: #9293a0; }
+.status { font-size: 9px; padding: 4px 7px; border-radius: 8px; }
+.connected { color: #56806b; background: #edf8f1; }
+.isolated { color: #9e8051; background: #fff8e7; }
+.cyclic { color: #b8383c; background: #fdeeee; }
+.component h3 { font-size: 14px; margin: 14px 0 8px; }
+.service-list { display: flex; gap: 5px; flex-wrap: wrap; }
+.mini { font: 9px "DM Mono"; padding: 4px 5px; border-radius: 3px; background: #f3f3f7; color: #666878; }
+
+.toast { position: fixed; bottom: 25px; left: 50%; transform: translate(-50%, 90px); background: #25253a; color: #fff; padding: 11px 16px; border-radius: 6px; font-size: 12px; transition: 0.25s; z-index: 20; }
+.toast.show { transform: translate(-50%, 0); }
+
+svg { width: 100%; height: 100%; overflow: visible; }
+.edge { stroke: #c9cad4; stroke-width: 1.4; fill: none; marker-end: url(#arrow); }
+.edge.selected-edge { stroke: var(--purple); stroke-width: 2.2; marker-end: url(#arrow-purple); }
+.scc-box { fill: rgba(229,72,77,0.06); stroke: var(--red); stroke-width: 1.4; stroke-dasharray: 5 4; }
+.scc-label { font: 700 9px "DM Mono"; fill: var(--red); letter-spacing: 0.4px; }
+.node { cursor: pointer; transition: 0.2s; }
+.node circle { stroke-width: 2.5; transition: 0.25s; }
+.node:hover circle { filter: brightness(0.96); stroke: #26263c; }
+.node.selected circle { stroke: var(--purple); stroke-width: 4; }
+.node text { font: 600 11px Manrope; fill: #363748; text-anchor: middle; pointer-events: none; }
+.node .type { font: 9px "DM Mono"; fill: #9293a2; }
+.node .node-icon { font-size: 13px; fill: white; }
+
+@media (max-width: 780px) {
+  header { padding: 0 20px; }
+  .brand small, .live, .ghost { display: none; }
+  main { padding: 38px 20px; }
+  .intro, .bottom-heading { display: block; }
+  .stats { margin-top: 26px; }
+  .workspace { grid-template-columns: 1fr; }
+  .left-panel { border-right: 0; }
+  .right-panel { border-top: 1px solid var(--line); }
+  .canvas-wrap { height: 460px; }
+  h1 { font-size: 32px; }
+  .lab { padding: 24px 18px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="brand-mark">◈</span><span>clusterflow</span><small>SCC-AWARE OPTIMIZER</small></div>
+  <div class="header-actions">
+    <span class="live"><i></i> LIVE MODEL</span>
+    <button class="ghost" id="reset">Reset graph</button>
+  </div>
+</header>
+<main>
+  <section class="intro">
+    <div>
+      <p class="eyebrow">DIRECTED CALL GRAPH WITH CYCLES / TARJAN SCC</p>
+      <h1>Find the cycles.<br/><em>Contract them automatically.</em></h1>
+      <p class="sub">Two of these services call each other in a loop — a real circular-dependency smell. Tarjan's algorithm finds every strongly connected component in one linear pass, then the graph condenses itself: no manual node picking.</p>
+    </div>
+    <div class="stats">
+      <div><b id="serviceCount">0</b><span>services (V)</span></div>
+      <div><b id="edgeCount">0</b><span>calls (E)</span></div>
+      <div><b id="sccCount">0</b><span>cycles found</span></div>
+    </div>
+  </section>
+
+  <section class="workspace">
+    <aside class="left-panel">
+      <div class="panel-title">
+        <span>CALL GRAPH</span>
+        <div class="btnrow">
+          <button class="btn-cycle" id="detectBtn">Detect cycles (Tarjan)</button>
+          <button class="btn-condense" id="condenseBtn">Contract via Tarjan</button>
+        </div>
+      </div>
+      <div class="legend">
+        <span><i class="dot selected-dot"></i> selected for manual merge</span>
+        <span><i class="scc-dot"></i> cycle found by Tarjan</span>
+        <span><i class="line"></i> calls (A → B)</span>
+      </div>
+      <div class="canvas-wrap">
+        <svg id="graph" viewBox="0 0 1000 660" aria-label="Directed microservice call graph with cycles">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0,0 L10,5 L0,10 z" fill="#c9cad4"/>
+            </marker>
+            <marker id="arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0,0 L10,5 L0,10 z" fill="#725cff"/>
+            </marker>
+          </defs>
+        </svg>
+        <div class="hint">Click services to select a manual contract group</div>
+      </div>
+    </aside>
+    <aside class="right-panel">
+      <div class="panel-title"><span>MANUAL CONTRACTION</span><span class="badge" id="selectedCount">0 SELECTED</span></div>
+      <p class="queue-copy">Or pick any services yourself — calls between selected services stop counting as network hops.</p>
+      <div class="selection" id="selection">
+        <div class="empty-icon">⌘</div><p>No services selected</p><small>Select nodes in the map.</small>
+      </div>
+      <div class="impact">
+        <p>ESTIMATED IMPACT</p>
+        <div class="impact-row"><span>Calls internalized</span><b id="callReduction">—</b></div>
+        <div class="impact-row"><span>Deployment units</span><b id="unitChange">—</b></div>
+      </div>
+      <button class="wide primary" id="contractBottom" disabled>Contract selected <span>↗</span></button>
+      <div class="scc-summary" id="sccSummary" style="margin-top:16px"></div>
+    </aside>
+  </section>
+
+  <section class="lab">
+    <div class="lab-head">
+      <div>
+        <p class="eyebrow">TARJAN TRACE</p>
+        <h2>Watch the algorithm find the cycles</h2>
+        <p>One DFS pass. Each node gets a discovery index and a low-link value; when a node's low-link equals its own index, everything above it on the stack is one strongly connected component.</p>
+      </div>
+    </div>
+    <div class="lab-body">
+      <div class="lab-card">
+        <p class="label">EXECUTION TRACE</p>
+        <ul class="trace" id="trace"><li>Click "Detect cycles (Tarjan)" above to run it.</li></ul>
+      </div>
+      <div class="lab-card">
+        <p class="label">COMPONENTS FOUND</p>
+        <ul class="timeline" id="sccList"><li class="timeline-empty">No run yet.</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="lab">
+    <div class="lab-head">
+      <div>
+        <p class="eyebrow">COMPLEXITY COMPARISON</p>
+        <h2>Naive traversal vs. Tarjan + condensation</h2>
+        <p>Two different questions, two different answers. "Who's affected if X fails" — one node at a time — is O(V+E) either way. "Who's affected, for every service" is where condensation changes the complexity class, not just the constant.</p>
+      </div>
+      <div class="lab-controls">
+        <select id="probeSelect"></select>
+        <button class="danger" id="runComplexity">Run comparison</button>
+      </div>
+    </div>
+    <p class="label" style="margin:0 0 10px">SINGLE-NODE QUERY — SAME COMPLEXITY CLASS, SMALLER CONSTANT</p>
+    <div class="complexity-grid">
+      <div class="ccard">
+        <div class="bigo">O(V+E) on raw graph</div>
+        <div class="sub">Reverse BFS from the probed node, cycles handled by the visited set.</div>
+        <div class="num" id="singleBefore">—</div>
+      </div>
+      <div class="ccard">
+        <div class="bigo">O(V′+E′) on condensed graph</div>
+        <div class="sub">Same BFS, smaller graph — cycle members already known to share fate.</div>
+        <div class="num" id="singleAfter">—</div>
+      </div>
+    </div>
+    <p class="label" style="margin:18px 0 10px">ALL-NODES PRECOMPUTE — COMPLEXITY CLASS CHANGES</p>
+    <div class="complexity-grid">
+      <div class="ccard">
+        <div class="bigo">O(V·(V+E)) naive</div>
+        <div class="sub">Independent BFS per node — can't safely memoize across a cyclic graph.</div>
+        <div class="num" id="allBefore">—</div>
+      </div>
+      <div class="ccard">
+        <div class="bigo">O(V+E) with Tarjan</div>
+        <div class="sub">Condense once, then a single reverse-topological DP pass over the DAG.</div>
+        <div class="num" id="allAfter">—</div>
+      </div>
+    </div>
+    <div class="scale-note" id="scaleNote">Run the comparison to see measured operation counts and a projection at production scale.</div>
+  </section>
+
+  <section class="bottom">
+    <div class="bottom-heading">
+      <div>
+        <p class="eyebrow">DEPLOYMENT BOUNDARIES</p>
+        <h2>Weakly connected components</h2>
+      </div>
+      <p>Groups with no call path between them at all, direction ignored. A "CYCLIC" tag means Tarjan found a real loop inside that group.</p>
+    </div>
+    <div class="components" id="components"></div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (s) => document.querySelector(s), svg = $("#graph");
+
+const baseNodes = [
+  { id: "gateway",   name: "API Gateway", x: 70,  y: 330, c: "#725cff" },
+  { id: "auth",      name: "Auth",        x: 260, y: 110, c: "#4cbfd0" },
+  { id: "orders",    name: "Orders",      x: 300, y: 330, c: "#ff8196" },
+  { id: "catalog",   name: "Catalog",     x: 260, y: 560, c: "#f1b64c" },
+  { id: "payments",  name: "Payments",    x: 500, y: 200, c: "#ff8196" },
+  { id: "fraud",     name: "Fraud Check", x: 500, y: 340, c: "#ff8196" },
+  { id: "riskdb",    name: "Risk DB",     x: 500, y: 470, c: "#a9abb8" },
+  { id: "userdb",    name: "User DB",     x: 480, y: 20,  c: "#a9abb8" },
+  { id: "inventory", name: "Inventory",   x: 500, y: 580, c: "#f1b64c" },
+  { id: "pricing",   name: "Pricing",     x: 650, y: 630, c: "#f1b64c" },
+  { id: "orderdb",   name: "Order DB",    x: 710, y: 20,  c: "#a9abb8" },
+  { id: "notify",    name: "Notify",      x: 710, y: 290, c: "#4cbfd0" },
+  { id: "warehouse", name: "Warehouse",   x: 710, y: 440, c: "#f1b64c" },
+  { id: "analytics", name: "Analytics",   x: 710, y: 150, c: "#725cff" },
+  { id: "legacy",    name: "Legacy CRM",  x: 920, y: 150, c: "#a9abb8" },
+];
+const baseEdges = [
+  ["gateway", "auth"], ["gateway", "orders"], ["gateway", "catalog"],
+  ["auth", "userdb"],
+  ["orders", "auth"], ["orders", "payments"], ["orders", "orderdb"], ["orders", "analytics"],
+  ["payments", "fraud"], ["fraud", "orders"], ["fraud", "riskdb"],
+  ["catalog", "inventory"],
+  ["inventory", "pricing"], ["pricing", "inventory"],
+  ["inventory", "warehouse"], ["inventory", "notify"],
+  ["payments", "notify"], ["payments", "analytics"],
+  ["analytics", "legacy"],
+].map(([from, to]) => ({ from, to }));
+
+let nodes, edges, selected;
+let lastSCCs = [];          // array of arrays of node ids, from most recent Tarjan run
+let lastSCCSet = {};        // id -> scc index (for nontrivial sccs only)
+
+function cloneNodes(a) { return a.map((n) => ({ ...n })); }
+function cloneEdges(a) { return a.map((e) => ({ ...e })); }
+
+function hasReverse(from, to) { return edges.some((e) => e.from === to && e.to === from); }
+
+function weakGroups() {
+  let seen = new Set(), out = [];
+  nodes.forEach((n) => {
+    if (seen.has(n.id)) return;
+    let st = [n.id], g = [];
+    seen.add(n.id);
+    while (st.length) {
+      let id = st.pop();
+      g.push(id);
+      edges.forEach(({ from, to }) => {
+        let q = from === id ? to : to === id ? from : null;
+        if (q && !seen.has(q)) { seen.add(q); st.push(q); }
+      });
+    }
+    out.push(g);
+  });
+  return out;
+}
+
+// ---------- Tarjan's SCC algorithm ----------
+function runTarjan(nodeList, edgeList, trace) {
+  let index = 0, indices = {}, low = {}, onStack = {}, stack = [], sccs = [];
+  function strongconnect(v) {
+    indices[v] = low[v] = index; index++;
+    stack.push(v); onStack[v] = true;
+    if (trace) trace.push(`visit <b>${v}</b> — index=${indices[v]} low=${low[v]}`);
+    edgeList.filter((e) => e.from === v).forEach((e) => {
+      let w = e.to;
+      if (!(w in indices)) {
+        strongconnect(w);
+        low[v] = Math.min(low[v], low[w]);
+        if (trace) trace.push(`&nbsp;&nbsp;back at <b>${v}</b>, low updated from <b>${w}</b> → ${low[v]}`);
+      } else if (onStack[w]) {
+        low[v] = Math.min(low[v], indices[w]);
+        if (trace) trace.push(`&nbsp;&nbsp;<b>${v}</b> sees <b>${w}</b> already on stack → low = ${low[v]}`);
+      }
+    });
+    if (low[v] === indices[v]) {
+      let comp = [], w;
+      do { w = stack.pop(); onStack[w] = false; comp.push(w); } while (w !== v);
+      if (trace) trace.push(`<span style="color:#ff9b9b">→ root found at <b>${v}</b>: SCC = { ${comp.join(", ")} }</span>`);
+      sccs.push(comp);
+    }
+  }
+  nodeList.forEach((n) => { if (!(n.id in indices)) strongconnect(n.id); });
+  return sccs;
+}
+
+function detectCycles(showTrace) {
+  let trace = showTrace ? [] : null;
+  lastSCCs = runTarjan(nodes, edges, trace);
+  lastSCCSet = {};
+  lastSCCs.forEach((comp, i) => { if (comp.length > 1) comp.forEach((id) => (lastSCCSet[id] = i)); });
+  if (showTrace) {
+    $("#trace").innerHTML = trace.map((t) => `<li>${t}</li>`).join("");
+    let nontrivial = lastSCCs.filter((c) => c.length > 1);
+    $("#sccList").innerHTML = nontrivial.length
+      ? nontrivial.map((c, i) => {
+          let names = c.map((id) => nodes.find((n) => n.id === id).name);
+          return `<li><span class="t" style="color:#ff9b9b">SCC ${i + 1}</span><span class="msg"><b>${c.length} services</b> — ${names.join(" → ")} → (back to ${names[0]}). These fail together no matter which one goes first.</span></li>`;
+        }).join("")
+      : `<li class="timeline-empty">No cycles in the current graph — every SCC is trivial (size 1).</li>`;
+  }
+  $("#sccCount").textContent = lastSCCs.filter((c) => c.length > 1).length;
+  $("#sccSummary").innerHTML = lastSCCs.filter((c) => c.length > 1).map((c) => {
+    let names = c.map((id) => nodes.find((n) => n.id === id).name).join(", ");
+    return `<div class="scc-item">CYCLE (${c.length}): ${names}</div>`;
+  }).join("");
+  return lastSCCs;
+}
+
+// build the condensation graph directly from an SCC list
+function condense(sccs) {
+  let compOf = {};
+  sccs.forEach((comp, i) => comp.forEach((id) => (compOf[id] = i)));
+  let compNode = sccs.map((comp, i) => {
+    let members = comp.map((id) => nodes.find((n) => n.id === id));
+    let cx = members.reduce((s, n) => s + n.x, 0) / members.length;
+    let cy = members.reduce((s, n) => s + n.y, 0) / members.length;
+    return comp.length > 1
+      ? { id: "scc" + i, name: "Module (" + comp.length + ")", x: cx, y: cy, c: "#725cff", origIds: comp.flatMap((id) => (nodes.find((n) => n.id === id).origIds || [id])) }
+      : { ...members[0] };
+  });
+  let seen = new Set(), condEdges = [];
+  edges.forEach(({ from, to }) => {
+    let A = compNode[compOf[from]].id, B = compNode[compOf[to]].id;
+    let key = A + ">" + B;
+    if (A !== B && !seen.has(key)) { seen.add(key); condEdges.push({ from: A, to: B }); }
+  });
+  return { compNode, condEdges };
+}
+
+function contractViaTarjan() {
+  let sccs = detectCycles(true);
+  let nontrivial = sccs.filter((c) => c.length > 1);
+  if (!nontrivial.length) return toast("No cycles found — nothing to contract");
+  let { compNode, condEdges } = condense(sccs);
+  nodes = compNode;
+  edges = condEdges;
+  selected = new Set();
+  lastSCCSet = {};
+  render();
+  toast(`Contracted ${nontrivial.length} cycle${nontrivial.length > 1 ? "s" : ""} via Tarjan — graph now ${nodes.length} nodes, ${edges.length} edges`);
+}
+
+// ---------- rendering ----------
+function edgePath(a, b) {
+  let dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+  let ux = dx / len, uy = dy / len;
+  let x1 = a.x + ux * 34, y1 = a.y + uy * 34, x2 = b.x - ux * 34, y2 = b.y - uy * 34;
+  if (hasReverse(a.id, b.id)) {
+    let mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    let px = -uy, py = ux;
+    let sign = a.id < b.id ? 1 : -1;
+    let cx = mx + px * 22 * sign, cy = my + py * 22 * sign;
+    return `M${x1},${y1} Q${cx},${cy} ${x2},${y2}`;
+  }
+  return `M${x1},${y1} L${x2},${y2}`;
+}
+
+function render() {
+  let map = Object.fromEntries(nodes.map((n) => [n.id, n]));
+
+  let sccBoxes = "";
+  Object.values(lastSCCSet).filter((v, i, a) => a.indexOf(v) === i).forEach((idx) => {
+    let members = nodes.filter((n) => lastSCCSet[n.id] === idx);
+    if (members.length < 2) return;
+    let minX = Math.min(...members.map((n) => n.x)) - 55, maxX = Math.max(...members.map((n) => n.x)) + 55;
+    let minY = Math.min(...members.map((n) => n.y)) - 55, maxY = Math.max(...members.map((n) => n.y)) + 55;
+    sccBoxes += `<rect class="scc-box" x="${minX}" y="${minY}" width="${maxX - minX}" height="${maxY - minY}" rx="16"/>
+      <text class="scc-label" x="${minX + 10}" y="${minY + 16}">CYCLE — ${members.length} SERVICES</text>`;
+  });
+
+  let edgesHTML = edges.map(({ from, to }) => {
+    if (!map[from] || !map[to]) return "";
+    let cls = "edge" + (selected.has(from) && selected.has(to) ? " selected-edge" : "");
+    return `<path class="${cls}" d="${edgePath(map[from], map[to])}"/>`;
+  }).join("");
+
+  let nodesHTML = nodes.map((n) => {
+    let cls = "node" + (selected.has(n.id) ? " selected" : "");
+    return `<g class="${cls}" data-id="${n.id}" transform="translate(${n.x},${n.y})">
+      <circle r="31" fill="${n.c}" stroke="#fff"/>
+      <text class="node-icon" y="5">+</text>
+      <text y="49">${n.name}</text>
+      <text class="type" y="63">${n.origIds && n.origIds.length > 1 ? "MODULE" : "SERVICE"}</text>
+    </g>`;
+  }).join("");
+
+  let defs = svg.querySelector("defs").outerHTML;
+  svg.innerHTML = defs + `<g>${sccBoxes}</g><g>${edgesHTML}</g><g>${nodesHTML}</g>`;
+
+  svg.querySelectorAll(".node").forEach((e) => {
+    e.onclick = () => {
+      let id = e.dataset.id;
+      selected.has(id) ? selected.delete(id) : selected.add(id);
+      render();
+    };
+  });
+
+  let g = weakGroups();
+  $("#serviceCount").textContent = nodes.length;
+  $("#edgeCount").textContent = edges.length;
+
+  $("#selection").innerHTML = selected.size
+    ? [...selected].map((x) => `<span class="service-chip">${map[x].name}</span>`).join("")
+    : `<div class="empty-icon">+</div><p>No services selected</p><small>Select nodes in the map.</small>`;
+  $("#selectedCount").textContent = selected.size + " SELECTED";
+
+  let k = edges.filter((e) => selected.has(e.from) && selected.has(e.to)).length, ok = selected.size > 1;
+  $("#callReduction").textContent = ok ? k + " internalized" : "—";
+  $("#unitChange").textContent = ok ? "-" + (selected.size - 1) + " units" : "—";
+  $("#contractBottom").disabled = !ok;
+
+  $("#components").innerHTML = g.map((x, i) => {
+    let cyclic = x.some((id) => id in lastSCCSet);
+    return `<article class="component">
+      <div class="component-top">
+        <span class="component-id">GROUP 0${i + 1}</span>
+        <span class="status ${x.length === 1 ? "isolated" : cyclic ? "cyclic" : "connected"}">${x.length === 1 ? "ISOLATED" : cyclic ? "CYCLIC" : "CONNECTED"}</span>
+      </div>
+      <h3>${x.length} service deployment group</h3>
+      <div class="service-list">${x.map((id) => `<span class="mini">${map[id].name}</span>`).join("")}</div>
+    </article>`;
+  }).join("");
+
+  let f = $("#probeSelect"), v = f.value;
+  f.innerHTML = baseNodes.map((bn) => {
+    let host = nodes.find((n) => (n.origIds || [n.id]).includes(bn.id));
+    let tag = host && host.origIds && host.origIds.length > 1 ? ` — inside ${host.name}` : "";
+    return `<option value="${bn.id}">${bn.name}${tag}</option>`;
+  }).join("");
+  if (v && baseNodes.some((bn) => bn.id === v)) f.value = v;
+}
+
+function toast(s) {
+  let t = $("#toast");
+  t.textContent = s;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 3200);
+}
+
+function contractManual() {
+  if (selected.size < 2) return;
+  let list = [...selected], picked = nodes.filter((n) => selected.has(n.id));
+  let u = {
+    id: "unit" + Date.now(), name: "Module (" + list.length + ")",
+    x: picked.reduce((s, n) => s + n.x, 0) / list.length,
+    y: picked.reduce((s, n) => s + n.y, 0) / list.length,
+    c: "#725cff",
+    origIds: picked.flatMap((n) => n.origIds || [n.id]),
+  };
+  let out = [], seen = new Set();
+  edges.forEach(({ from, to }) => {
+    let A = selected.has(from) ? u.id : from, B = selected.has(to) ? u.id : to, key = A + ">" + B;
+    if (A !== B && !seen.has(key)) { seen.add(key); out.push({ from: A, to: B }); }
+  });
+  nodes = nodes.filter((n) => !selected.has(n.id));
+  nodes.push(u);
+  edges = out;
+  selected.clear();
+  lastSCCSet = {};
+  render();
+  toast("Deployment unit created");
+}
+
+function reset() {
+  nodes = cloneNodes(baseNodes).map((n) => ({ ...n, origIds: [n.id] }));
+  edges = cloneEdges(baseEdges);
+  selected = new Set();
+  lastSCCs = []; lastSCCSet = {};
+  $("#trace").innerHTML = `<li>Click "Detect cycles (Tarjan)" above to run it.</li>`;
+  $("#sccList").innerHTML = `<li class="timeline-empty">No run yet.</li>`;
+  $("#singleBefore").textContent = "—"; $("#singleAfter").textContent = "—";
+  $("#allBefore").textContent = "—"; $("#allAfter").textContent = "—";
+  $("#scaleNote").textContent = "Run the comparison to see measured operation counts and a projection at production scale.";
+  render();
+}
+
+// ---------- complexity instrumentation ----------
+function costedAncestorLevels(edgeList, id) {
+  let ops = 0, level = { [id]: 0 }, queue = [id];
+  while (queue.length) {
+    let cur = queue.shift();
+    for (let e of edgeList) {
+      ops++;
+      if (e.to === cur && !(e.from in level)) { level[e.from] = level[cur] + 1; queue.push(e.from); }
+    }
+  }
+  return { level, ops };
+}
+
+function naiveAllNodes(nodeList, edgeList) {
+  let totalOps = 0;
+  nodeList.forEach((n) => { totalOps += costedAncestorLevels(edgeList, n.id).ops; });
+  return totalOps;
+}
+
+// condense + single reverse-topological DP pass to get every node's ancestor set
+function tarjanAllNodes(nodeList, edgeList) {
+  let ops = 0;
+  let sccs = runTarjan(nodeList, edgeList, null);
+  ops += nodeList.length + edgeList.length; // Tarjan itself, O(V+E)
+  let compOf = {};
+  sccs.forEach((comp, i) => comp.forEach((id) => (compOf[id] = i)));
+  let compEdges = [], seen = new Set(), indeg = {};
+  sccs.forEach((_, i) => (indeg[i] = 0));
+  edgeList.forEach(({ from, to }) => {
+    ops++;
+    let A = compOf[from], B = compOf[to], key = A + ">" + B;
+    if (A !== B && !seen.has(key)) { seen.add(key); compEdges.push({ from: A, to: B }); indeg[B]++; }
+  });
+  // Kahn's topological sort on the condensation DAG
+  let queue = sccs.map((_, i) => i).filter((i) => indeg[i] === 0), topo = [];
+  let indegCopy = { ...indeg };
+  while (queue.length) {
+    let u = queue.shift(); ops++; topo.push(u);
+    compEdges.filter((e) => e.from === u).forEach((e) => { ops++; if (--indegCopy[e.to] === 0) queue.push(e.to); });
+  }
+  // single DP pass in topological order: propagate ancestor sets forward
+  let ancestorSet = sccs.map(() => new Set());
+  topo.forEach((u) => {
+    compEdges.filter((e) => e.from === u).forEach((e) => {
+      ops++;
+      ancestorSet[e.to].add(u);
+      ancestorSet[u].forEach((a) => { ancestorSet[e.to].add(a); ops++; });
+    });
+  });
+  return { ops, sccCount: sccs.length, condV: sccs.length, condE: compEdges.length };
+}
+
+function avgTime(fn, iters) {
+  let start = performance.now();
+  for (let i = 0; i < iters; i++) fn();
+  return (performance.now() - start) / iters;
+}
+
+function runComplexity() {
+  let id = $("#probeSelect").value; // always a real microservice, never a synthetic module id
+  if (!id) return toast("Choose a service to probe first");
+
+  detectCycles(true); // refresh the trace/cycle panels for the current graph
+
+  // BEFORE: cost of detecting this microservice's cascade in the original, fully-uncontracted architecture
+  let before = costedAncestorLevels(baseEdges, id);
+  let tBefore = avgTime(() => costedAncestorLevels(baseEdges, id), 400);
+
+  // AFTER: cost of detecting the SAME microservice's cascade in the current architecture — if it has
+  // already been folded into a module (manually or via Tarjan), we trace from that module's boundary,
+  // since that's where the failure actually becomes network-visible now.
+  let host = nodes.find((n) => (n.origIds || [n.id]).includes(id));
+  let hostId = host ? host.id : id;
+  let after = costedAncestorLevels(edges, hostId);
+  let tAfter = avgTime(() => costedAncestorLevels(edges, hostId), 400);
+  let inModule = host && host.origIds && host.origIds.length > 1;
+  let hostNote = inModule
+    ? ` — ${baseNodes.find((n) => n.id === id).name} is folded into ${host.name} (${host.origIds.length} services share fate here)`
+    : ` — ${baseNodes.find((n) => n.id === id).name} is not currently contracted`;
+
+  $("#singleBefore").textContent = `${before.ops} ops · V+E=${baseNodes.length + baseEdges.length} · ${tBefore.toFixed(4)}ms avg`;
+  $("#singleAfter").textContent = `${after.ops} ops · V′+E′=${nodes.length + edges.length} · ${tAfter.toFixed(4)}ms avg${hostNote}`;
+
+  // all-nodes precompute: naive vs Tarjan+DP
+  let naiveOps = naiveAllNodes(nodes, edges);
+  let tNaive = avgTime(() => naiveAllNodes(nodes, edges), 60);
+  let tOut = tarjanAllNodes(nodes, edges);
+  let tTarjan = avgTime(() => tarjanAllNodes(nodes, edges), 60);
+  $("#allBefore").textContent = `${naiveOps} ops total · ${tNaive.toFixed(4)}ms avg`;
+  $("#allAfter").textContent = `${tOut.ops} ops total (condenses to V′=${tOut.condV}, E′=${tOut.condE}) · ${tTarjan.toFixed(4)}ms avg`;
+
+  let V = nodes.length, E = edges.length;
+  let projNaive = V * (V + E);
+  let projTarjan = (V + E) + tOut.condV + tOut.condE;
+  let scaleV = 500, scaleE = Math.round(scaleV * (E / V));
+  let scaleNaive = scaleV * (scaleV + scaleE);
+  let ratioVprime = tOut.condV / V, ratioEprime = tOut.condE / Math.max(E, 1);
+  let scaleTarjan = (scaleV + scaleE) + Math.round(scaleV * ratioVprime) + Math.round(scaleE * ratioEprime);
+  $("#scaleNote").innerHTML = `On this graph: naive all-nodes precompute took <b>${naiveOps} operations</b> vs <b>${tOut.ops}</b> with Tarjan + condensation — both trivially fast at 15 services. The complexity classes are O(V·(V+E)) ≈ <b>${projNaive}</b> vs O(V+E) ≈ <b>${projTarjan}</b> here. Holding this graph's cycle ratio, a <b>${scaleV}-service</b> system would need roughly <b>${scaleNaive.toLocaleString()}</b> operations naively vs about <b>${scaleTarjan.toLocaleString()}</b> with Tarjan first — the gap is the whole point of doing this once instead of per-query.`;
+}
+
+$("#reset").onclick = reset;
+$("#contractBottom").onclick = contractManual;
+$("#detectBtn").onclick = () => detectCycles(true);
+$("#condenseBtn").onclick = contractViaTarjan;
+$("#runComplexity").onclick = runComplexity;
+
+reset();
+</script>
+</body>
+</html>
