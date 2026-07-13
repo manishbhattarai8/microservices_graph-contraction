@@ -85,6 +85,7 @@ h1 em { font-family: Georgia, serif; font-weight: 400; color: var(--purple); }
 .lab-head p { font-size: 11px; color: #9c9dbb; max-width: 420px; line-height: 1.65; margin: 8px 0 0; }
 .lab-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .lab-controls select { font: 500 12px "DM Mono"; padding: 10px 12px; border-radius: 6px; border: 1px solid #33334f; background: #1f2038; color: #fff; min-width: 190px; }
+.lab-controls input[type="number"] { font: 500 12px "DM Mono"; padding: 10px 12px; border-radius: 6px; border: 1px solid #33334f; background: #1f2038; color: #fff; width: 90px; }
 .danger { background: #e5484d; color: white; border-radius: 7px; padding: 11px 15px; }
 .lab-body { display: grid; grid-template-columns: 1.15fr 1fr; gap: 20px; }
 @media (max-width: 900px) { .lab-body { grid-template-columns: 1fr; } }
@@ -135,6 +136,13 @@ h1 em { font-family: Georgia, serif; font-weight: 400; color: var(--purple); }
 
 .toast { position: fixed; bottom: 25px; left: 50%; transform: translate(-50%, 90px); background: #25253a; color: #fff; padding: 11px 16px; border-radius: 6px; font-size: 12px; transition: 0.25s; z-index: 20; }
 .toast.show { transform: translate(-50%, 0); }
+
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 16px; }
+.stat-box { background: #1f2038; border: 1px solid #2e2f4c; border-radius: 7px; padding: 12px 14px; }
+.stat-label { font: 9px "DM Mono"; color: #8f90b0; letter-spacing: 0.5px; margin-bottom: 6px; }
+.stat-value { font: 600 14px "DM Mono"; color: #fff; }
+.stat-value.warn { color: #ff9b9b; }
+.improvement { font: 600 11px "DM Mono"; color: #54cc9a; margin-top: 4px; }
 
 svg { width: 100%; height: 100%; overflow: visible; }
 .edge { stroke: #c9cad4; stroke-width: 1.4; fill: none; marker-end: url(#arrow); }
@@ -253,39 +261,123 @@ svg { width: 100%; height: 100%; overflow: visible; }
   <section class="lab">
     <div class="lab-head">
       <div>
-        <p class="eyebrow">COMPLEXITY COMPARISON</p>
-        <h2>Naive traversal vs. Tarjan + condensation</h2>
-        <p>Two different questions, two different answers. "Who's affected if X fails" — one node at a time — is O(V+E) either way. "Who's affected, for every service" is where condensation changes the complexity class, not just the constant.</p>
+        <p class="eyebrow">FAILURE DETECTION PERFORMANCE</p>
+        <h2>Raw graph vs. contracted graph — multi-iteration analysis</h2>
+        <p>Measure failure cascade detection across multiple iterations. Shows average time, variability (std dev), and percentiles to reveal consistent performance across both architectures.</p>
       </div>
       <div class="lab-controls">
         <select id="probeSelect"></select>
-        <button class="danger" id="runComplexity">Run comparison</button>
+        <label style="color: #9c9dbb; font-size: 11px;">
+          Iterations:
+          <input type="number" id="iterationCount" min="10" max="1000" value="100" />
+        </label>
+        <button class="danger" id="runPerformance">Run performance analysis</button>
       </div>
     </div>
-    <p class="label" style="margin:0 0 10px">SINGLE-NODE QUERY — SAME COMPLEXITY CLASS, SMALLER CONSTANT</p>
-    <div class="complexity-grid">
-      <div class="ccard">
-        <div class="bigo">O(V+E) on raw graph</div>
-        <div class="sub">Reverse BFS from the probed node, cycles handled by the visited set.</div>
-        <div class="num" id="singleBefore">—</div>
+    <div class="lab-body">
+      <div class="lab-card">
+        <p class="label">RAW GRAPH (UNCONTRACTED)</p>
+        <div class="stats-grid">
+          <div class="stat-box">
+            <div class="stat-label">AVG TIME</div>
+            <div class="stat-value" id="rawAvg">—</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">MIN / MAX</div>
+            <div class="stat-value" id="rawMinMax">—</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">P50 / P95</div>
+            <div class="stat-value" id="rawP50P95">—</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">STD DEV</div>
+            <div class="stat-value" id="rawStdDev">—</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">AFFECTED COUNT</div>
+            <div class="stat-value" id="rawAffected">—</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">OPS</div>
+            <div class="stat-value" id="rawOps">—</div>
+          </div>
+        </div>
       </div>
-      <div class="ccard">
-        <div class="bigo">O(V′+E′) on condensed graph</div>
-        <div class="sub">Same BFS, smaller graph — cycle members already known to share fate.</div>
-        <div class="num" id="singleAfter">—</div>
+      <div class="lab-card">
+        <p class="label">CONTRACTED GRAPH</p>
+        <div class="stats-grid">
+          <div class="stat-box">
+            <div class="stat-label">AVG TIME</div>
+            <div class="stat-value" id="contractAvg">—</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">MIN / MAX</div>
+            <div class="stat-value" id="contractMinMax">—</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">P50 / P95</div>
+            <div class="stat-value" id="contractP50P95">—</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">STD DEV</div>
+            <div class="stat-value" id="contractStdDev">—</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">AFFECTED COUNT</div>
+            <div class="stat-value" id="contractAffected">—</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">OPS</div>
+            <div class="stat-value" id="contractOps">—</div>
+          </div>
+        </div>
       </div>
     </div>
-    <p class="label" style="margin:18px 0 10px">ALL-NODES PRECOMPUTE — COMPLEXITY CLASS CHANGES</p>
-    <div class="complexity-grid">
-      <div class="ccard">
-        <div class="bigo">O(V·(V+E)) naive</div>
-        <div class="sub">Independent BFS per node — can't safely memoize across a cyclic graph.</div>
-        <div class="num" id="allBefore">—</div>
+    <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #2a2b47;">
+      <p class="label" style="margin: 0 0 12px;">COMPARATIVE SUMMARY</p>
+      <div id="perfSummary" style="font-size: 11px; color: #d5d6ea; line-height: 1.7;"></div>
+    </div>
+  </section>
+
+  <section class="lab">
+    <div class="lab-head">
+      <div>
+        <p class="eyebrow">COMPLEXITY ANALYSIS</p>
+        <h2>Theoretical complexity comparison</h2>
+        <p>Single-node cascade detection is O(V+E) either way, but all-nodes precomputation changes from O(V·(V+E)) to O(V+E) with Tarjan-first condensation.</p>
       </div>
-      <div class="ccard">
-        <div class="bigo">O(V+E) with Tarjan</div>
-        <div class="sub">Condense once, then a single reverse-topological DP pass over the DAG.</div>
-        <div class="num" id="allAfter">—</div>
+    </div>
+    <div class="lab-body">
+      <div class="lab-card">
+        <p class="label">SINGLE-NODE QUERY — SAME COMPLEXITY CLASS, SMALLER CONSTANT</p>
+        <div class="complexity-grid">
+          <div class="ccard">
+            <div class="bigo">O(V+E) on raw graph</div>
+            <div class="sub">Reverse BFS from the probed node, cycles handled by the visited set.</div>
+            <div class="num" id="singleBefore">—</div>
+          </div>
+          <div class="ccard">
+            <div class="bigo">O(V′+E′) on condensed graph</div>
+            <div class="sub">Same BFS, smaller graph — cycle members already known to share fate.</div>
+            <div class="num" id="singleAfter">—</div>
+          </div>
+        </div>
+      </div>
+      <div class="lab-card">
+        <p class="label">ALL-NODES PRECOMPUTE — COMPLEXITY CLASS CHANGES</p>
+        <div class="complexity-grid">
+          <div class="ccard">
+            <div class="bigo">O(V·(V+E)) naive</div>
+            <div class="sub">Independent BFS per node — can't safely memoize across a cyclic graph.</div>
+            <div class="num" id="allBefore">—</div>
+          </div>
+          <div class="ccard">
+            <div class="bigo">O(V+E) with Tarjan</div>
+            <div class="sub">Condense once, then a single reverse-topological DP pass over the DAG.</div>
+            <div class="num" id="allAfter">—</div>
+          </div>
+        </div>
       </div>
     </div>
     <div class="scale-note" id="scaleNote">Run the comparison to see measured operation counts and a projection at production scale.</div>
@@ -337,8 +429,8 @@ const baseEdges = [
 ].map(([from, to]) => ({ from, to }));
 
 let nodes, edges, selected;
-let lastSCCs = [];          // array of arrays of node ids, from most recent Tarjan run
-let lastSCCSet = {};        // id -> scc index (for nontrivial sccs only)
+let lastSCCs = [];
+let lastSCCSet = {};
 
 function cloneNodes(a) { return a.map((n) => ({ ...n })); }
 function cloneEdges(a) { return a.map((e) => ({ ...e })); }
@@ -416,7 +508,6 @@ function detectCycles(showTrace) {
   return lastSCCs;
 }
 
-// build the condensation graph directly from an SCC list
 function condense(sccs) {
   let compOf = {};
   sccs.forEach((comp, i) => comp.forEach((id) => (compOf[id] = i)));
@@ -584,112 +675,118 @@ function reset() {
   render();
 }
 
-// ---------- complexity instrumentation ----------
+// ---------- Performance analysis ----------
+function analyzePerformance(fn, iterations) {
+  let times = [];
+  for (let i = 0; i < iterations; i++) {
+    let start = performance.now();
+    fn();
+    times.push(performance.now() - start);
+  }
+  
+  times.sort((a, b) => a - b);
+  let sum = times.reduce((a, b) => a + b, 0);
+  let avg = sum / times.length;
+  let min = times[0];
+  let max = times[times.length - 1];
+  let p50 = times[Math.floor(times.length * 0.5)];
+  let p95 = times[Math.floor(times.length * 0.95)];
+  let p99 = times[Math.floor(times.length * 0.99)];
+  let stddev = Math.sqrt(times.reduce((sum, t) => sum + Math.pow(t - avg, 2), 0) / times.length);
+  
+  return { avg, min, max, p50, p95, p99, stddev, times };
+}
+
 function costedAncestorLevels(edgeList, id) {
   let ops = 0, level = { [id]: 0 }, queue = [id];
   while (queue.length) {
     let cur = queue.shift();
     for (let e of edgeList) {
       ops++;
-      if (e.to === cur && !(e.from in level)) { level[e.from] = level[cur] + 1; queue.push(e.from); }
+      if (e.to === cur && !(e.from in level)) {
+        level[e.from] = level[cur] + 1;
+        queue.push(e.from);
+      }
     }
   }
-  return { level, ops };
+  return { level, ops, affectedCount: Object.keys(level).length };
 }
 
-function naiveAllNodes(nodeList, edgeList) {
-  let totalOps = 0;
-  nodeList.forEach((n) => { totalOps += costedAncestorLevels(edgeList, n.id).ops; });
-  return totalOps;
-}
-
-// condense + single reverse-topological DP pass to get every node's ancestor set
-function tarjanAllNodes(nodeList, edgeList) {
-  let ops = 0;
-  let sccs = runTarjan(nodeList, edgeList, null);
-  ops += nodeList.length + edgeList.length; // Tarjan itself, O(V+E)
-  let compOf = {};
-  sccs.forEach((comp, i) => comp.forEach((id) => (compOf[id] = i)));
-  let compEdges = [], seen = new Set(), indeg = {};
-  sccs.forEach((_, i) => (indeg[i] = 0));
-  edgeList.forEach(({ from, to }) => {
-    ops++;
-    let A = compOf[from], B = compOf[to], key = A + ">" + B;
-    if (A !== B && !seen.has(key)) { seen.add(key); compEdges.push({ from: A, to: B }); indeg[B]++; }
-  });
-  // Kahn's topological sort on the condensation DAG
-  let queue = sccs.map((_, i) => i).filter((i) => indeg[i] === 0), topo = [];
-  let indegCopy = { ...indeg };
-  while (queue.length) {
-    let u = queue.shift(); ops++; topo.push(u);
-    compEdges.filter((e) => e.from === u).forEach((e) => { ops++; if (--indegCopy[e.to] === 0) queue.push(e.to); });
-  }
-  // single DP pass in topological order: propagate ancestor sets forward
-  let ancestorSet = sccs.map(() => new Set());
-  topo.forEach((u) => {
-    compEdges.filter((e) => e.from === u).forEach((e) => {
-      ops++;
-      ancestorSet[e.to].add(u);
-      ancestorSet[u].forEach((a) => { ancestorSet[e.to].add(a); ops++; });
-    });
-  });
-  return { ops, sccCount: sccs.length, condV: sccs.length, condE: compEdges.length };
-}
-
-function avgTime(fn, iters) {
-  let start = performance.now();
-  for (let i = 0; i < iters; i++) fn();
-  return (performance.now() - start) / iters;
-}
-
-function runComplexity() {
-  let id = $("#probeSelect").value; // always a real microservice, never a synthetic module id
+function runPerformance() {
+  let id = $("#probeSelect").value;
   if (!id) return toast("Choose a service to probe first");
 
-  detectCycles(true); // refresh the trace/cycle panels for the current graph
+  let iterations = parseInt($("#iterationCount").value) || 100;
+  if (iterations < 10 || iterations > 1000) {
+    toast("Iterations must be between 10 and 1000");
+    return;
+  }
 
-  // BEFORE: cost of detecting this microservice's cascade in the original, fully-uncontracted architecture
-  let before = costedAncestorLevels(baseEdges, id);
-  let tBefore = avgTime(() => costedAncestorLevels(baseEdges, id), 400);
+  detectCycles(false); // refresh cycle detection without UI trace
 
-  // AFTER: cost of detecting the SAME microservice's cascade in the current architecture — if it has
-  // already been folded into a module (manually or via Tarjan), we trace from that module's boundary,
-  // since that's where the failure actually becomes network-visible now.
-  let host = nodes.find((n) => (n.origIds || [n.id]).includes(id));
-  let hostId = host ? host.id : id;
-  let after = costedAncestorLevels(edges, hostId);
-  let tAfter = avgTime(() => costedAncestorLevels(edges, hostId), 400);
-  let inModule = host && host.origIds && host.origIds.length > 1;
-  let hostNote = inModule
-    ? ` — ${baseNodes.find((n) => n.id === id).name} is folded into ${host.name} (${host.origIds.length} services share fate here)`
-    : ` — ${baseNodes.find((n) => n.id === id).name} is not currently contracted`;
+  // Get the current contracted graph state
+  let hostId = nodes.find((n) => (n.origIds || [n.id]).includes(id))?.id || id;
+  
+  // Measure raw graph (using baseNodes/baseEdges)
+  let rawStats = analyzePerformance(() => costedAncestorLevels(baseEdges, id), iterations);
+  let rawData = costedAncestorLevels(baseEdges, id);
 
-  $("#singleBefore").textContent = `${before.ops} ops · V+E=${baseNodes.length + baseEdges.length} · ${tBefore.toFixed(4)}ms avg`;
-  $("#singleAfter").textContent = `${after.ops} ops · V′+E′=${nodes.length + edges.length} · ${tAfter.toFixed(4)}ms avg${hostNote}`;
+  // Measure contracted graph
+  let contractStats = analyzePerformance(() => costedAncestorLevels(edges, hostId), iterations);
+  let contractData = costedAncestorLevels(edges, hostId);
 
-  // all-nodes precompute: naive vs Tarjan+DP
-  let naiveOps = naiveAllNodes(nodes, edges);
-  let tNaive = avgTime(() => naiveAllNodes(nodes, edges), 60);
-  let tOut = tarjanAllNodes(nodes, edges);
-  let tTarjan = avgTime(() => tarjanAllNodes(nodes, edges), 60);
-  $("#allBefore").textContent = `${naiveOps} ops total · ${tNaive.toFixed(4)}ms avg`;
-  $("#allAfter").textContent = `${tOut.ops} ops total (condenses to V′=${tOut.condV}, E′=${tOut.condE}) · ${tTarjan.toFixed(4)}ms avg`;
+  // Display results
+  $("#rawAvg").textContent = rawStats.avg.toFixed(4) + " ms";
+  $("#rawMinMax").textContent = rawStats.min.toFixed(4) + " / " + rawStats.max.toFixed(4) + " ms";
+  $("#rawP50P95").textContent = rawStats.p50.toFixed(4) + " / " + rawStats.p95.toFixed(4) + " ms";
+  $("#rawStdDev").textContent = rawStats.stddev.toFixed(4) + " ms";
+  $("#rawAffected").textContent = rawData.affectedCount;
+  $("#rawOps").textContent = rawData.ops;
 
-  let V = nodes.length, E = edges.length;
-  let projNaive = V * (V + E);
-  let projTarjan = (V + E) + tOut.condV + tOut.condE;
-  let scaleV = 500, scaleE = Math.round(scaleV * (E / V));
-  let scaleNaive = scaleV * (scaleV + scaleE);
-  let ratioVprime = tOut.condV / V, ratioEprime = tOut.condE / Math.max(E, 1);
-  let scaleTarjan = (scaleV + scaleE) + Math.round(scaleV * ratioVprime) + Math.round(scaleE * ratioEprime);
-  $("#scaleNote").innerHTML = `On this graph: naive all-nodes precompute took <b>${naiveOps} operations</b> vs <b>${tOut.ops}</b> with Tarjan + condensation — both trivially fast at 15 services. The complexity classes are O(V·(V+E)) ≈ <b>${projNaive}</b> vs O(V+E) ≈ <b>${projTarjan}</b> here. Holding this graph's cycle ratio, a <b>${scaleV}-service</b> system would need roughly <b>${scaleNaive.toLocaleString()}</b> operations naively vs about <b>${scaleTarjan.toLocaleString()}</b> with Tarjan first — the gap is the whole point of doing this once instead of per-query.`;
+  $("#contractAvg").textContent = contractStats.avg.toFixed(4) + " ms";
+  $("#contractMinMax").textContent = contractStats.min.toFixed(4) + " / " + contractStats.max.toFixed(4) + " ms";
+  $("#contractP50P95").textContent = contractStats.p50.toFixed(4) + " / " + contractStats.p95.toFixed(4) + " ms";
+  $("#contractStdDev").textContent = contractStats.stddev.toFixed(4) + " ms";
+  $("#contractAffected").textContent = contractData.affectedCount;
+  $("#contractOps").textContent = contractData.ops;
+
+  // Summary
+  let timeImprovement = ((rawStats.avg - contractStats.avg) / rawStats.avg * 100).toFixed(1);
+  let opsImprovement = ((rawData.ops - contractData.ops) / rawData.ops * 100).toFixed(1);
+  let consistencyRaw = (rawStats.stddev / rawStats.avg * 100).toFixed(1);
+  let consistencyContract = (contractStats.stddev / contractStats.avg * 100).toFixed(1);
+
+  $("#perfSummary").innerHTML = `
+    <div style="margin-bottom: 12px;">
+      <b>Execution time:</b> Raw graph averaged <b>${rawStats.avg.toFixed(4)}ms</b> ± ${rawStats.stddev.toFixed(4)}ms over ${iterations} iterations. 
+      Contracted graph averaged <b>${contractStats.avg.toFixed(4)}ms</b> ± ${contractStats.stddev.toFixed(4)}ms.
+      <span style="color: #54cc9a; margin-left: 8px;">↓ ${timeImprovement}% faster</span>
+    </div>
+    <div style="margin-bottom: 12px;">
+      <b>Operations:</b> Raw graph required <b>${rawData.ops}</b> ops to detect ${rawData.affectedCount} affected services.
+      Contracted graph required <b>${contractData.ops}</b> ops to detect ${contractData.affectedCount} affected services.
+      <span style="color: #54cc9a; margin-left: 8px;">↓ ${opsImprovement}% fewer ops</span>
+    </div>
+    <div style="margin-bottom: 12px;">
+      <b>Variability (coefficient of variation):</b> Raw graph ${consistencyRaw}%, Contracted ${consistencyContract}%. 
+      ${parseFloat(consistencyContract) < parseFloat(consistencyRaw) ? 
+        '<span style="color: #54cc9a;">Contracted graph is more consistent</span>' : 
+        '<span style="color: #f1b64c;">Similar variability across both graphs</span>'}
+    </div>
+    <div>
+      <b>Observation:</b> At scale, query latency depends on edge count traversal. A ${iterations}-iteration run stabilizes around the mean; 
+      the real win appears in all-services precomputation where you avoid re-traversing the full graph per service.
+    </div>
+  `;
+
+  toast("Performance analysis complete");
 }
 
 $("#reset").onclick = reset;
 $("#contractBottom").onclick = contractManual;
 $("#detectBtn").onclick = () => detectCycles(true);
 $("#condenseBtn").onclick = contractViaTarjan;
-$("#runComplexity").onclick = runComplexity;
+$("#runPerformance").onclick = runPerformance;
 
 reset();
 </script>
